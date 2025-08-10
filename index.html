@@ -3,42 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>3×3 Image Sheet – A4 / 63×88mm / Guide</title>
+  <title>Deck Code → A4 3×3 Sheets (63×88mm)</title>
   <style>
     :root{
-      --gap: 0mm; /* 指定: 画像の間は空白なし */
-      --cell-w: 63mm;
-      --cell-h: 88mm;
+      --cell-w: 63mm;   /* 1枚 横63mm */
+      --cell-h: 88mm;   /* 1枚 縦88mm */
+      --gap: 0mm;       /* 画像間の余白なし */
       --grid-w: calc(var(--cell-w) * 3);
       --grid-h: calc(var(--cell-h) * 3);
+      --guide: 1.2pt dashed #111; /* 周囲の点線ガイド */
     }
     *{ box-sizing: border-box; }
     html,body{ height:100%; margin:0; }
     body{
       font-family: system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
-      background: #f5f7fb;
-      color: #111;
+      background:#f5f7fb; color:#111;
     }
     header{ position:sticky; top:0; z-index:10; background:#fff; border-bottom:1px solid #e5e7eb; }
     .toolbar{ max-width:1100px; margin:0 auto; padding:10px 16px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
     .btn{ appearance:none; background:#111; color:#fff; border:none; padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer; }
     .btn.secondary{ background:#e5e7eb; color:#111; }
     .field{ display:flex; align-items:center; gap:8px; padding:6px 10px; background:#fff; border:1px solid #e5e7eb; border-radius:10px; }
-    .field input[type="text"]{ width:420px; max-width:70vw; }
+    .field input[type="text"], .field input[type="url"]{ width:320px; max-width:60vw; }
 
-    main{ max-width:1100px; margin:18px auto 60px; padding:0 16px; }
+    main{ max-width:1100px; margin:18px auto 80px; padding:0 16px; }
 
-    /* A4表示: 210mm × 297mm 比率。画面では比率維持、印刷時は実寸。 */
-    .a4-wrap{ display:grid; place-items:center; }
+    .a4-wrap{ display:grid; place-items:center; gap:22px; }
     .a4{ width:min(96vw, calc(96vh * (210/297))); aspect-ratio:210/297; background:#fff; box-shadow:0 10px 30px rgba(0,0,0,.08); border-radius:6px; position:relative; overflow:hidden; }
-
-    /* 3x3グリッド（中央配置、線なし、隙間なし） */
-    .sheet{ position:absolute; left:50%; top:50%; width:var(--grid-w); height:var(--grid-h); transform:translate(-50%, -50%); display:grid; grid-template-columns: repeat(3, var(--cell-w)); grid-template-rows: repeat(3, var(--cell-h)); gap: var(--gap); }
+    .sheet{ position:absolute; left:50%; top:50%; width:var(--grid-w); height:var(--grid-h); transform:translate(-50%, -50%); display:grid; grid-template-columns: repeat(3, var(--cell-w)); grid-template-rows: repeat(3, var(--cell-h)); gap:var(--gap); }
+    .sheet::before{ content:""; position:absolute; inset:0; border:var(--guide); pointer-events:none; }
     .cell{ width:var(--cell-w); height:var(--cell-h); background:#fff; overflow:hidden; }
     .cell img{ width:100%; height:100%; display:block; object-fit:contain; background:#fff; }
-
-    /* 周囲のガイド線（点線） */
-    .sheet::before{ content:""; position:absolute; inset:0; border:1.2pt dashed #111; pointer-events:none; }
 
     footer{ text-align:center; color:#6b7280; font-size:12px; padding:24px; }
 
@@ -48,129 +43,144 @@
       body{ background:#fff; }
       header, footer{ display:none; }
       .a4{ width:210mm; height:297mm; box-shadow:none; border-radius:0; }
+      .a4 + .a4{ page-break-before: always; }
     }
   </style>
 </head>
 <body>
   <header>
     <div class="toolbar" role="toolbar" aria-label="Controls">
-      <button class="btn" id="applyBtn">9個のURLを反映</button>
-      <button class="btn secondary" id="sampleBtn">サンプルURLを入れる</button>
-      <label class="field" title="画像のフィット方法">
-        <span>フィット:</span>
+      <label class="field" title="デッキコード例: ggnNQ9-cFqwyn-NLLn6Q">
+        <span>デッキコード</span>
+        <input id="deckCode" type="text" placeholder="例: ggnNQ9-cFqwyn-NLLn6Q" />
+      </label>
+      <button class="btn" id="fetchBtn">カード画像を取得</button>
+      <button class="btn secondary" id="printBtn" onclick="window.print()">🖨️ 印刷</button>
+      <label class="field" title="収まり方">
+        <span>フィット</span>
         <select id="fitMode">
-          <option value="contain" selected>余白優先（切り抜きなし）</option>
+          <option value="contain" selected>切り抜きなし（余白あり）</option>
           <option value="cover">全面優先（はみ出しカット）</option>
         </select>
       </label>
-      <button class="btn" onclick="window.print()">🖨️ 印刷</button>
+      <label class="field" title="同じ画像URLは1回だけ使う">
+        <input id="dedupe" type="checkbox" checked />重複画像をまとめる
+      </label>
     </div>
   </header>
 
   <main>
-    <section style="display:grid; gap:8px; margin-bottom:14px;">
-      <details open>
-        <summary style="cursor:pointer; font-weight:700;">画像URL（9個・JPEG推奨）</summary>
-        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:8px; margin-top:10px;">
-          <input class="url" type="url" placeholder="URL 1" />
-          <input class="url" type="url" placeholder="URL 2" />
-          <input class="url" type="url" placeholder="URL 3" />
-          <input class="url" type="url" placeholder="URL 4" />
-          <input class="url" type="url" placeholder="URL 5" />
-          <input class="url" type="url" placeholder="URL 6" />
-          <input class="url" type="url" placeholder="URL 7" />
-          <input class="url" type="url" placeholder="URL 8" />
-          <input class="url" type="url" placeholder="URL 9" />
-        </div>
-        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
-          <label class="field" style="flex:1 1 auto;">
-            <span>まとめ貼り付け</span>
-            <input id="bulk" type="text" placeholder="9行で貼り付け（改行区切り）" />
-          </label>
-          <button class="btn secondary" id="bulkApply">分配</button>
-        </div>
-        <p style="margin:6px 0 0; font-size:12px; color:#6b7280;">※ 63×88mm の枠に等倍で入れます。既定は「切り抜きなし（余白あり）」です。画像の間隔は 0mm、枠線は無し。外周に点線のガイドを表示します。</p>
-      </details>
+    <section style="margin: 0 0 12px 0; font-size:12px; color:#6b7280;">
+      <p>背景は白のA4。中央に 63×88mm の3×3（余白0、枠線なし）を配置。各ページ外周に点線ガイド。デッキコードからカード画像（JPEG）を取得し、9枚ごとにページを増やします。9枚に満たない最後のページは空白セルを残します。</p>
     </section>
 
-    <div class="a4-wrap">
-      <div class="a4">
-        <div id="sheet" class="sheet" aria-label="3x3 image grid">
-          <!-- 9 cells -->
-          <div class="cell"><img alt="1" /></div>
-          <div class="cell"><img alt="2" /></div>
-          <div class="cell"><img alt="3" /></div>
-          <div class="cell"><img alt="4" /></div>
-          <div class="cell"><img alt="5" /></div>
-          <div class="cell"><img alt="6" /></div>
-          <div class="cell"><img alt="7" /></div>
-          <div class="cell"><img alt="8" /></div>
-          <div class="cell"><img alt="9" /></div>
-        </div>
-      </div>
-    </div>
+    <div id="pages" class="a4-wrap"></div>
   </main>
 
   <footer>
-    背景は白のA4。3×3グリッド（63×88mm）を中央配置。外周のみ点線ガイド。印刷は余白0推奨。
+    取得に失敗する場合はサイト側の制限（CORS等）によるものです。その場合は自動回避のフォールバックを使います。
   </footer>
 
   <script>
-    const SHEET = document.getElementById('sheet');
-    const URL_INPUTS = Array.from(document.querySelectorAll('input.url'));
-    const APPLY = document.getElementById('applyBtn');
-    const SAMPLE = document.getElementById('sampleBtn');
-    const BULK = document.getElementById('bulk');
-    const BULK_APPLY = document.getElementById('bulkApply');
+    const PAGES = document.getElementById('pages');
+    const CODE = document.getElementById('deckCode');
+    const FETCH_BTN = document.getElementById('fetchBtn');
     const FIT = document.getElementById('fitMode');
+    const DEDUPE = document.getElementById('dedupe');
 
-    function applyFit(){
-      SHEET.querySelectorAll('img').forEach(img=>{ img.style.objectFit = FIT.value; });
+    function makeSheet(images){
+      // 1ページ（A4）を作って9セル配置
+      const a4 = document.createElement('div');
+      a4.className = 'a4';
+      const sheet = document.createElement('div');
+      sheet.className = 'sheet';
+      for(let i=0;i<9;i++){
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        const img = document.createElement('img');
+        img.alt = String(i+1);
+        img.style.objectFit = FIT.value;
+        if(images[i]) img.src = images[i]; // 空白セルはsrc未設定（白）
+        cell.appendChild(img);
+        sheet.appendChild(cell);
+      }
+      a4.appendChild(sheet);
+      return a4;
     }
 
-    FIT.addEventListener('change', applyFit);
-
-    function setImages(urls){
-      const imgs = SHEET.querySelectorAll('img');
-      imgs.forEach((img,i)=>{
-        const u = urls[i] || '';
-        img.src = u;
-      });
+    function renderPages(urls){
+      PAGES.innerHTML = '';
+      if(urls.length === 0){
+        PAGES.appendChild(makeSheet([]));
+        return;
+      }
+      for(let i=0;i<urls.length; i+=9){
+        const slice = urls.slice(i, i+9);
+        PAGES.appendChild(makeSheet(slice));
+      }
     }
 
-    APPLY.addEventListener('click', ()=>{
-      const urls = URL_INPUTS.map(i=>i.value.trim());
-      if (urls.filter(Boolean).length !== 9) {
-        if (!confirm('9個すべてのURLが埋まっていません。空欄は表示されません。続行しますか？')) return;
+    FIT.addEventListener('change', ()=>{
+      // 反映（既存のimgに適用）
+      PAGES.querySelectorAll('img').forEach(img => img.style.objectFit = FIT.value);
+    });
+
+    async function fetchText(url){
+      // 通常fetch → 失敗時に r.jina.ai 経由のフォールバック（CORS回避）
+      try{
+        const r = await fetch(url, { mode: 'cors' });
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        return await r.text();
+      }catch(e){
+        console.warn('Direct fetch failed, fallback via r.jina.ai', e);
+        const fallback0 = 'https://r.jina.ai/' + url; // https://r.jina.ai/https://...
+        const r2 = await fetch(fallback0);
+        if(r2.ok) return await r2.text();
+        const fallback1 = 'https://r.jina.ai/http://'+ url.replace(/^https?:\/\//,'');
+        const r3 = await fetch(fallback1);
+        if(!r3.ok) throw new Error('Fallback failed: '+r3.status);
+        return await r3.text();
       }
-      setImages(urls);
-    });
+    }
 
-    BULK_APPLY.addEventListener('click', ()=>{
-      const lines = BULK.value.split(/\n|\r/).map(s=>s.trim()).filter(Boolean);
-      for(let i=0;i<URL_INPUTS.length;i++){
-        URL_INPUTS[i].value = lines[i] || URL_INPUTS[i].value;
+    function extractImageUrls(html){
+      // デッキページ内に現れる大サイズ画像URLを抽出
+      const re = /https?:\\/\\/www\.pokemon-card\.com\\/assets\\/images\\/card_images\\/large\\/[^\"'\s<>]+\.jpg/gi;
+      const found = html.match(re) || [];
+      // 順序維持でユニーク化
+      const seen = new Set();
+      const urls = [];
+      for(const u of found){ if(!seen.has(u)){ seen.add(u); urls.push(u); } }
+      return urls;
+    }
+
+    async function handleFetch(){
+      const code = (CODE.value || '').trim();
+      if(!code){ alert('デッキコードを入力してください。'); return; }
+      const url = `https://www.pokemon-card.com/deck/${encodeURIComponent(code)}`;
+      try{
+        FETCH_BTN.disabled = true; FETCH_BTN.textContent = '取得中…';
+        const html = await fetchText(url);
+        let urls = extractImageUrls(html);
+        if(DED UPE.checked){
+          // 既にユニーク化済みだが、念のため
+          const t = []; const s = new Set();
+          for(const u of urls){ if(!s.has(u)){ s.add(u); t.push(u); } }
+          urls = t;
+        }
+        renderPages(urls);
+      }catch(err){
+        console.error(err);
+        alert('カード画像の取得に失敗しました。コードが正しいか、時間をおいて再試行してください。');
+      }finally{
+        FETCH_BTN.disabled = false; FETCH_BTN.textContent = 'カード画像を取得';
       }
-    });
+    }
 
-    SAMPLE.addEventListener('click', ()=>{
-      const sample = [
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047394_P_KUNUGIDAMA.jpg',
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047393_P_BAKUFOON.jpg',
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047392_P_HINOARASHI.jpg',
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047394_P_KUNUGIDAMA.jpg',
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047393_P_BAKUFOON.jpg',
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047392_P_HINOARASHI.jpg',
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047394_P_KUNUGIDAMA.jpg',
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047393_P_BAKUFOON.jpg',
-        'https://www.pokemon-card.com/assets/images/card_images/large/SV10/047392_P_HINOARASHI.jpg',
-      ];
-      URL_INPUTS.forEach((inp,i)=> inp.value = sample[i] || '');
-      setImages(sample);
-    });
+    FETCH_BTN.addEventListener('click', handleFetch);
 
-    // 初期状態: フィット適用
-    applyFit();
+    // デモ用: サンプルコードがあれば自動入力
+    // CODE.value = 'ggnNQ9-cFqwyn-NLLn6Q';
   </script>
 </body>
 </html>

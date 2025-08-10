@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A4 White Canvas – Free Web App</title>
+  <style>
+    :root {
+      --ui-gap: 12px;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", "Meiryo", sans-serif;
+      background: #f4f6f8;
+      color: #111;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: saturate(180%) blur(8px);
+      background: rgba(255, 255, 255, 0.85);
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .toolbar {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      gap: var(--ui-gap);
+      align-items: center;
+      padding: 10px 16px;
+      flex-wrap: wrap;
+    }
+    .toolbar > * { margin: 4px 0; }
+    .btn {
+      appearance: none;
+      background: #111;
+      color: #fff;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: transform .04s ease, opacity .2s ease;
+      user-select: none;
+    }
+    .btn.secondary { background: #e5e7eb; color: #111; }
+    .btn:active { transform: translateY(1px); }
+    .btn[aria-pressed="true"] { outline: 2px solid #2563eb; }
+
+    .field {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+    }
+    .field label { font-size: 12px; color: #374151; }
+
+    main {
+      max-width: 1100px;
+      margin: 18px auto 60px;
+      padding: 0 16px;
+    }
+
+    /* A4 portrait area: 210mm × 297mm aspect ratio */
+    .a4-wrap {
+      display: grid;
+      place-items: center;
+    }
+    .a4 {
+      width: min(96vw, calc(96vh * (210 / 297)));
+      aspect-ratio: 210 / 297;
+      background: #ffffff; /* 無色(白) */
+      box-shadow: 0 10px 30px rgba(0,0,0,.08);
+      border-radius: 6px;
+      position: relative;
+      overflow: hidden;
+      touch-action: none; /* enable smooth drawing on touch */
+    }
+    canvas { width: 100%; height: 100%; display: block; }
+
+    footer { text-align: center; color: #6b7280; font-size: 12px; padding: 24px; }
+    .hint { color: #6b7280; font-size: 12px; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="toolbar" role="toolbar" aria-label="Drawing toolbar">
+      <button id="penBtn" class="btn" aria-pressed="true" title="ペン (P)">✏️ ペン</button>
+      <button id="eraserBtn" class="btn secondary" aria-pressed="false" title="消しゴム (E)">🩹 消しゴム</button>
+
+      <span class="field">
+        <label for="color">色</label>
+        <input id="color" type="color" value="#111111" />
+      </span>
+
+      <span class="field">
+        <label for="size">太さ</label>
+        <input id="size" type="range" min="1" max="40" value="4" />
+      </span>
+
+      <button id="clearBtn" class="btn secondary" title="全消去">🗑️ 全消去</button>
+      <button id="downloadBtn" class="btn" title="PNGで保存 (Ctrl/Cmd+S 相当)">⬇️ PNG保存</button>
+      <span class="hint">PC/スマホで利用可・無料ホスティング可（下記説明）</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="a4-wrap">
+      <!-- 内部解像度はA4を高精細で扱えるよう大きめに設定（300DPI相当） -->
+      <div class="a4">
+        <canvas id="board" width="2480" height="3508" aria-label="A4 drawing canvas"></canvas>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    A4比率の白キャンバス上で描画できます。ホスティング手順は本文末尾のコメント参照。
+  </footer>
+
+  <script>
+    // --- State ---
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    // 初期白塗り
+    function fillWhiteBackground() {
+      ctx.save();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore();
+    }
+    fillWhiteBackground();
+
+    let drawing = false;
+    let erasing = false;
+    let last = null; // {x,y}
+
+    const penBtn = document.getElementById('penBtn');
+    const eraserBtn = document.getElementById('eraserBtn');
+    const color = document.getElementById('color');
+    const size = document.getElementById('size');
+    const clearBtn = document.getElementById('clearBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    function setTool(mode) {
+      erasing = (mode === 'eraser');
+      penBtn.setAttribute('aria-pressed', String(!erasing));
+      eraserBtn.setAttribute('aria-pressed', String(erasing));
+      penBtn.classList.toggle('secondary', erasing);
+      eraserBtn.classList.toggle('secondary', !erasing);
+    }
+
+    penBtn.addEventListener('click', () => setTool('pen'));
+    eraserBtn.addEventListener('click', () => setTool('eraser'));
+
+    // Pointer coords -> canvas coords（表示倍率に依存しない）
+    function getCanvasPos(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = (evt.clientX - rect.left) * scaleX;
+      const y = (evt.clientY - rect.top) * scaleY;
+      return { x, y };
+    }
+
+    function drawLine(a, b) {
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = parseFloat(size.value);
+
+      if (erasing) {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = color.value;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function pointerDown(e) {
+      e.preventDefault();
+      canvas.setPointerCapture(e.pointerId);
+      drawing = true;
+      last = getCanvasPos(e);
+    }
+
+    function pointerMove(e) {
+      if (!drawing) return;
+      const p = getCanvasPos(e);
+      drawLine(last, p);
+      last = p;
+    }
+
+    function pointerUp(e) {
+      if (!drawing) return;
+      drawing = false;
+      canvas.releasePointerCapture(e.pointerId);
+    }
+
+    canvas.addEventListener('pointerdown', pointerDown);
+    canvas.addEventListener('pointermove', pointerMove);
+    canvas.addEventListener('pointerup', pointerUp);
+    canvas.addEventListener('pointercancel', pointerUp);
+    canvas.addEventListener('pointerleave', pointerUp);
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.key.toLowerCase() === 'p') setTool('pen');
+      if (e.key.toLowerCase() === 'e') setTool('eraser');
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        downloadPNG();
+      }
+    });
+
+    // Clear
+    clearBtn.addEventListener('click', () => {
+      const ok = confirm('キャンバスを全て消去しますか？');
+      if (ok) fillWhiteBackground();
+    });
+
+    // Download
+    function downloadPNG() {
+      const url = canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().replaceAll(':','-').slice(0,19);
+      a.href = url;
+      a.download = `a4-canvas-${ts}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    downloadBtn.addEventListener('click', downloadPNG);
+
+    // Resize observer (optional hint overlay could go here)
+    new ResizeObserver(() => {/* layout reactive; drawing is resolution-independent */}).observe(canvas);
+
+    // --- Print support (A4) ---
+    // このまま印刷するとA4で出力されます（ブラウザの印刷設定は余白なし推奨）
+    const printStyle = document.createElement('style');
+    printStyle.textContent = `
+      @page { size: A4 portrait; margin: 0; }
+      @media print {
+        body { background: #fff; }
+        header, footer { display: none; }
+        .a4 { width: 210mm; height: 297mm; box-shadow: none; border-radius: 0; }
+        canvas { width: 210mm; height: 297mm; }
+      }
+    `;
+    document.head.appendChild(printStyle);
+
+    // 初回ツール設定
+    setTool('pen');
+  </script>
+
+  <!--
+  =============================
+  無料で公開する手順（例）
+  =============================
+  ■ GitHub Pages（おすすめ）
+    1) GitHubで新規リポジトリを作成（Public）
+    2) 上の index.html をそのまま追加・コミット
+    3) Settings → Pages → Build and deployment: Source = Deploy from a branch
+       ・Branch: main / root を選択
+    4) 数分待つと公開URLが発行され、誰でもWebから利用できます。
+
+  ■ Netlify / Cloudflare Pages
+    ・無料プランでリポジトリを接続すれば自動でデプロイされます。
+
+  ■ ローカルで試す
+    ・ファイルをダブルクリックでブラウザ表示OK（サーバ不要）
+
+  スマホ・PC両対応（タッチ/マウス）。
+  背景は純白(#fff)のA4比率キャンバス。PNG保存・印刷(A4)に対応。
+  -->
+</body>
+</html>
